@@ -27,7 +27,7 @@
 -export([start_json_response/2, start_json_response/3, end_json_response/1]).
 -export([send_response/4,send_method_not_allowed/2,send_error/4, send_redirect/2,send_chunked_error/2]).
 -export([send_json/2,send_json/3,send_json/4,last_chunk/1,parse_multipart_request/3]).
--export([accepted_encodings/1,handle_request_int/5,validate_referer/1,validate_ctype/2]).
+-export([accepted_encodings/1,handle_request_int/5,validate_referer/1,validate_ctype/2, validate_encoding/2, validate_gzip/1, get_gzip_size/1]).
 
 start_link() ->
     start_link(http).
@@ -353,6 +353,30 @@ validate_ctype(Req, Ctype) ->
             throw({bad_ctype, "Content-Type must be "++Ctype})
         end
     end.
+
+validate_encoding(Req, Ctype) ->
+	case couch_httpd:header_value(Req, "Content-Encoding") of
+	"gzip" ->
+		ok;
+	undefined ->
+		twig:log(notice, "No Content-Encoding Found in request header", []),
+		undefined;
+	_Other ->
+		throw({bad_ctype, "Content-Encoding must be "++Ctype})
+	end.
+
+validate_gzip(InputData) ->
+	case erlang:binary_part(InputData, 0, 2) of
+	<<31, 139>> ->
+		ok;
+	_			->
+		throw({bad_ctype, "Input data encoding does not matech content-encoding:gzip!"})
+	end.
+
+get_gzip_size(GzipData) ->
+	<<A:8/integer,B:8/integer,C:8/integer,D:8/integer>> =
+		erlang:binary_part(GzipData, byte_size(GzipData), -4),
+	ISize = (D bsl 24) bor (C bsl 16) bor (B bsl 8) bor (A bsl 0).
 
 % Utilities
 
